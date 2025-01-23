@@ -1,0 +1,80 @@
+---
+title: "Practical machine learning course project"
+author: "Rasmus Klitgaard"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(caret)
+library(randomForest)
+```
+
+First off, we will download and load the data.
+
+```{r}
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", "training.csv")
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", "testing.csv")
+
+train <- read.csv("training.csv")
+quiz_data <- read.csv("testing.csv")
+```
+
+First off, we will look at what is in the dataset. The dimension of the training is `r dim(train)` and the dimension of the  test is `r dim(quiz_data)`.
+So there are `r length(names(train)) - 1` different features. 
+
+We will remove near zero variance parameters. First we split the training data in 80-20.
+```{r}
+use_training <- createDataPartition(train$classe, p=0.80, list=FALSE)
+training_set <- train[use_training,]
+testing_set <- train[-use_training,]
+dim(training_set)
+```
+and remoing the near zero variance parameters.
+```{r}
+near_zero_variance <- nearZeroVar(training_set)
+training_set <- training_set[, -near_zero_variance]
+testing_set  <- testing_set [, -near_zero_variance]
+dim(training_set)
+dim(testing_set)
+```
+We should probably remove the name and timestamps and such. These are the first 5 parameters.
+```{r}
+training_set <- training_set[ , -(1:5)]
+testing_set  <- testing_set [ , -(1:5)]
+dim(training_set)
+dim(testing_set)
+```
+We should also remove variables with only NAs. We remove rows with NAs.
+```{r}
+na_var <- sapply(training_set, function(x) mean(is.na(x)))
+training_set <- training_set[, na_var == FALSE]
+testing_set  <- testing_set [, na_var == FALSE]
+```
+
+
+We will train a random forest model with repeated cross validation. We will use 3 fold CV and repeat 2 times (in the interest of time).
+The Caret package gives us the traincontrol function, and we use this with <"repeatedcv">.
+Since my PC is slow, I randomly sample 2000 rows which hopefully include 1 of each classe.
+
+```{r}
+train_control <- trainControl(method = "repeatedcv", number = 3, repeats = 2)
+
+subsample <- training_set[sample(nrow(training_set), 2000), ]
+
+fit <- train(classe ~ . , data = subsample, method = "rf", trControl = train_control)
+```
+
+And predicting to new data with confusion matrix
+```{r}
+predictions <- predict(fit, new_data = testing_set)
+confusion_matrix <- confusionMatrix(table(predictions, subsample$classe))
+confusion_matrix
+```
+
+The confusion matrix indicates a very high degree of accuracy of 100% in all cases.
+I anticipate this will generalize outside the CV set as well.
